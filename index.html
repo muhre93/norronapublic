@@ -1,0 +1,2248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Norrona Opening Hours - Nordic Neon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ---------------------------------------------------------------
+   MS Norrona - Opening hours signage, Nordic Neon
+   Screen + back office in one file. ES5 only, ASCII-only JS.
+   Same design language as the cinema screen. The bottom bar is the
+   Infoscreen widget itself (widget.html), loaded unchanged.
+   --------------------------------------------------------------- */
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; width:100%; background:transparent; }
+body {
+  color:#f8fafc;
+  font-family: var(--font-family, 'Inter', Arial, sans-serif);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  --fit:1;
+}
+.stage { position:fixed; top:0; left:0; right:0; bottom:0; }
+
+/* ---------- WIDGET (bottom, full width) ---------- */
+.widget {
+  position:absolute; left:0; right:0; bottom:0;
+  width:100%; height:140px; border:0; display:block;
+  background:transparent;
+}
+
+/* ---------- RIGHT PANEL ---------- */
+.rail {
+  position:absolute; top:0; right:0; bottom:140px;
+  width:17vw; min-width:200px;
+  background:#000000;
+  display:flex; flex-direction:column;
+  /* fallback - the real value is set from the rail width in applyLayout */
+  padding:0 1.1vw 1.4vh 1.1vw;
+  overflow:hidden;
+}
+.rail::before {
+  content:""; position:absolute; top:6%; left:0; width:1px; height:88%;
+  background:-webkit-linear-gradient(top, rgba(0,242,254,0), rgba(0,242,254,0.15), rgba(0,242,254,0));
+  background:linear-gradient(180deg, rgba(0,242,254,0), rgba(0,242,254,0.15), rgba(0,242,254,0));
+}
+
+.module-header {
+  text-align:center; font-size: var(--sz-head-rail, 1.05vh); font-weight:700; letter-spacing:.24em;
+  color:#94a3b4; text-transform:uppercase; padding-top:1.7vh;
+}
+.module-header.main {
+  font-size: var(--sz-heading, 1.05vh);
+  color:#cfe0ee; letter-spacing:.2em;
+}
+.module-header span { position:relative; display:inline-block; padding-bottom:.9vh; }
+.module-header span::after {
+  content:""; position:absolute; bottom:0; left:50%; width:16px; height:2px;
+  margin-left:-8px; border-radius:2px; opacity:.9;
+  background:-webkit-linear-gradient(left, #00f2fe, #4facfe);
+  background:linear-gradient(90deg, #00f2fe, #4facfe);
+}
+.module-header.main span::after { width:1.7em; margin-left:-0.85em; }
+
+/* two stacked day panes - today and tomorrow - that cross-fade */
+.hours { flex:1 1 auto; min-height:0; position:relative; }
+.daypane {
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  display:flex; flex-direction:column; justify-content:center;
+  opacity:0; -webkit-transition:opacity .45s; transition:opacity .45s;
+}
+.daypane.is-on { opacity:1; }
+.daypane-inner { padding:calc(1.4vh * var(--fit)) 0; }
+
+.dayhead {
+  display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; align-items:center;
+  margin-bottom:calc(1.1vh * var(--fit)); padding:0 0.85em;
+}
+.dayname {
+  font-size:calc(var(--sz-day, 2.4vh) * var(--fit)); font-weight:600; color:#ffffff;
+  line-height:1; letter-spacing:.02em; -webkit-flex:0 0 auto; flex:0 0 auto;
+}
+.pin {
+  width:6px; height:6px; border-radius:50%; margin-right:.5em; flex:0 0 auto;
+  background:#00f2fe; box-shadow:0 0 7px rgba(0,242,254,0.7);
+}
+.tag {
+  margin-left:.7em; white-space:nowrap; -webkit-flex:0 0 auto; flex:0 0 auto;
+  font-size:calc(var(--sz-tag, 1vh) * var(--fit)); font-weight:700; letter-spacing:.11em; text-transform:uppercase;
+  color:#cbd5e1; background:rgba(6,11,25,0.75);
+  border:1px solid rgba(0,242,254,0.2); border-radius:20px;
+  padding:.4vh .6em;
+}
+.tag.live { color:#00f2fe; }
+
+/* every venue is a card, same as a screening on the cinema screen */
+.venue {
+  position:relative;
+  padding:calc(1.05vh * var(--fit)) 0.85em;
+  margin-bottom:calc(.75vh * var(--fit));
+  border-radius:10px;
+  background:rgba(255,255,255,0.028);
+  border:1px solid rgba(148,163,180,0.18);
+}
+.venue:last-child { margin-bottom:0; }
+.venue .name {
+  font-size:calc(var(--sz-name, 1.7vh) * var(--fit)); font-weight:600; color:#ffffff;
+  line-height:1.25; word-wrap:break-word; overflow-wrap:break-word;
+}
+.venue .slots {
+  font-size:calc(var(--sz-hours, 1.6vh) * var(--fit)); font-weight:500; color:#cbd5e1;
+  line-height:1.3; margin-top:calc(.5vh * var(--fit));
+  font-variant-numeric: tabular-nums; letter-spacing:.02em;
+}
+.venue .slots span { display:block; }
+.venue .vnote {
+  font-size:calc(var(--sz-note, 1.25vh) * var(--fit)); color:#94a3b4;
+  margin-top:calc(.4vh * var(--fit)); letter-spacing:.02em;
+}
+.venue.is-always .slots { color:#00f2fe; font-weight:600; }
+.venue.is-closed .slots { color:#94a3b4; }
+.venue.is-dim {
+  opacity:.42; background:transparent;
+  border-color:rgba(148,163,180,0.10);
+}
+
+/* one-line layout: name left, times right; wraps on a narrow rail */
+body.hours-row .venue {
+  display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; align-items:baseline;
+}
+body.hours-row .venue .name { -webkit-flex:1 1 auto; flex:1 1 auto; min-width:0; margin-right:.6em; }
+body.hours-row .venue .slots { -webkit-flex:0 0 auto; flex:0 0 auto; margin-top:0; text-align:right; margin-left:auto; }
+body.hours-row .venue .vnote { -webkit-flex:1 1 100%; flex:1 1 100%; }
+
+/* ---------- day switcher (foot of the rail) ---------- */
+.dayswitch { flex:0 0 auto; display:flex; padding-top:1.2vh; }
+.rail.no-rotate .dayswitch { display:none; }
+.seg { -webkit-flex:1 1 0px; flex:1 1 0px; min-width:0; }
+.seg + .seg { margin-left:.8em; }
+.seg-label {
+  font-size: var(--sz-head-rail, 1.05vh); font-weight:700; letter-spacing:.2em;
+  color:#64748b; text-transform:uppercase; text-align:center; margin-bottom:.8vh;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.seg.is-on .seg-label { color:#00f2fe; }
+.track {
+  position:relative; width:100%; height:4px; border-radius:4px;
+  background:rgba(255,255,255,0.10);
+}
+.track-fill {
+  position:relative; height:100%; border-radius:4px; width:0%;
+  background:-webkit-linear-gradient(left, #00f2fe, #4facfe);
+  background:linear-gradient(90deg, #00f2fe, #4facfe);
+}
+.track-dot {
+  display:none;
+  position:absolute; right:-3px; top:50%; margin-top:-4.5px;
+  width:9px; height:9px; border-radius:50%; background:#00f2fe;
+  box-shadow:0 0 0 2px #000000, 0 0 8px 1px #00f2fe;
+}
+.seg.is-on .track-dot { display:block; }
+
+/* ---------- MODES ---------- */
+body.mode-rail .widget { display:none; }
+body.mode-rail .rail { width:100vw; min-width:0; bottom:0; }
+body.no-widget .widget { display:none; }
+
+/* ===============================================================
+   BACK OFFICE
+   Same look and the same way of working as the cinema back office.
+   =============================================================== */
+.editor {
+  display:none; position:fixed; top:0; left:0; right:0; bottom:0; overflow:auto;
+  background:#070b12; color:#e6edf6;
+  font-size:14px; line-height:1.45;
+}
+body.mode-edit .editor { display:block; }
+body.mode-edit .stage { display:none; }
+body.mode-edit { overflow:auto; }
+
+.ed-shell { max-width:1080px; margin:0 auto; padding:0 28px 120px 28px; }
+
+.ed-top {
+  position:sticky; top:0; z-index:30;
+  background:rgba(7,11,18,0.96);
+  border-bottom:1px solid rgba(148,163,180,0.14);
+}
+.ed-top-row {
+  max-width:1080px; margin:0 auto; padding:20px 28px 0 28px;
+  display:flex; align-items:center;
+}
+.ed-title { font-size:17px; font-weight:600; letter-spacing:.01em; }
+.ed-title .dot {
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:#00f2fe; box-shadow:0 0 8px rgba(0,242,254,.8); margin-right:9px;
+  vertical-align:1px;
+}
+.ed-sub { font-size:12px; color:#6f7f96; margin-top:3px; }
+.ed-spacer { flex:1 1 auto; }
+.ed-actions { display:flex; align-items:center; gap:12px; }
+
+.ed-status {
+  font-size:12px; color:#6f7f96; white-space:nowrap;
+  display:flex; align-items:center; gap:7px;
+}
+.ed-status::before {
+  content:""; width:6px; height:6px; border-radius:50%;
+  background:#4a5769; flex:0 0 auto;
+}
+.ed-status.dirty::before { background:#ffb454; box-shadow:0 0 7px rgba(255,180,84,.6); }
+.ed-status.ok { color:#00f2fe; }
+.ed-status.ok::before { background:#00f2fe; box-shadow:0 0 7px rgba(0,242,254,.7); }
+.ed-status.err { color:#ff8080; }
+.ed-status.err::before { background:#ff8080; }
+
+.tabs {
+  position:relative; z-index:40;
+  max-width:1080px; margin:0 auto; padding:16px 28px 0 28px;
+  display:flex; gap:4px; flex-wrap:wrap;
+}
+.tabbtn {
+  position:relative; z-index:1;
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; font-size:13.5px; font-weight:500; color:#7f8ea3;
+  padding:10px 16px 13px 16px; border-bottom:2px solid transparent;
+}
+.tabbtn:hover { color:#cfe0ee; }
+.tabbtn.is-on { color:#ffffff; border-bottom-color:#00f2fe; }
+
+.tabpane { display:none; padding-top:26px; }
+.tabpane.is-on { display:block; }
+
+.card {
+  background:#0b1220; border:1px solid rgba(148,163,180,0.13);
+  border-radius:14px; padding:22px 24px; margin-bottom:18px;
+}
+.card-head { margin-bottom:18px; }
+.card-head h2 { font-size:14.5px; font-weight:600; letter-spacing:.01em; }
+.card-head p { font-size:12.5px; color:#6f7f96; margin-top:4px; max-width:70ch; }
+.card.sub { background:transparent; border-style:dashed; }
+
+.duo { display:flex; gap:18px; align-items:flex-start; }
+.duo > * { flex:1 1 0; min-width:0; }
+
+.field { margin-bottom:0; }
+.field > label {
+  display:flex; align-items:center; gap:5px;
+  font-size:11.5px; color:#7f8ea3; margin-bottom:7px; font-weight:500;
+}
+.fields { display:flex; flex-wrap:wrap; gap:16px; }
+.fields > .field { flex:1 1 200px; min-width:0; }
+.fields > .field.w-full { flex:1 1 100%; }
+.fields > .field.w-half { flex:1 1 calc(50% - 8px); }
+.fields > .field.w-num { flex:0 0 128px; }
+.fields > .field.w-day { flex:1 1 110px; }
+
+input, textarea, select {
+  background:#060b14; border:1px solid rgba(148,163,180,0.2); color:#e6edf6;
+  padding:10px 11px; border-radius:8px; font-family:inherit; font-size:13.5px; width:100%;
+  -webkit-appearance:none; appearance:none;
+}
+select {
+  background-image:-webkit-linear-gradient(45deg, transparent 50%, #7f8ea3 50%), -webkit-linear-gradient(315deg, #7f8ea3 50%, transparent 50%);
+  background-image:linear-gradient(45deg, transparent 50%, #7f8ea3 50%), linear-gradient(135deg, #7f8ea3 50%, transparent 50%);
+  background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+  padding-right:30px;
+}
+textarea { line-height:1.55; resize:vertical; }
+input:focus, textarea:focus, select:focus {
+  outline:none; border-color:rgba(0,242,254,.65); box-shadow:0 0 0 3px rgba(0,242,254,0.12);
+}
+input::-webkit-input-placeholder { color:#46536a; }
+input::placeholder { color:#46536a; }
+
+.num { position:relative; }
+.num input { padding-right:34px; text-align:left; }
+.num .unit {
+  position:absolute; right:11px; top:50%; margin-top:-8px;
+  font-size:11px; color:#5b6a80; pointer-events:none; line-height:16px;
+}
+
+.hint-inline { font-size:11.5px; color:#5b6a80; margin-top:7px; }
+
+.szbar {
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px;
+  margin:20px -24px -22px -24px; padding:14px 24px 16px 24px;
+  border-top:1px solid rgba(148,163,180,0.11);
+  background:rgba(148,163,180,0.03);
+  border-radius:0 0 14px 14px;
+}
+.szbar-label {
+  font-size:10.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+  color:#5b6a80; padding-bottom:9px; margin-right:2px;
+}
+.sz { flex:0 0 116px; }
+.sz > label {
+  display:flex; align-items:center; gap:5px;
+  font-size:11px; color:#7f8ea3; margin-bottom:6px;
+}
+.sz input { padding:7px 9px; font-size:13px; }
+
+.rows { display:flex; flex-direction:column; gap:8px; }
+.rowlabels {
+  display:flex; gap:10px; padding:0 12px 4px 12px;
+  font-size:10.5px; color:#5b6a80; letter-spacing:.06em; text-transform:uppercase;
+}
+.rrow {
+  display:flex; align-items:center; gap:10px;
+  background:#080e19; border:1px solid rgba(148,163,180,0.12);
+  border-radius:10px; padding:9px 12px;
+}
+.rrow:hover { border-color:rgba(148,163,180,0.2); }
+.rrow input, .rrow select { padding:8px 10px; font-size:13.5px; }
+.col-title { flex:1 1 auto; min-width:0; }
+.col-del   { flex:0 0 30px; }
+.col-move  { flex:0 0 68px; display:flex; gap:8px; }
+
+/* opening hours rows */
+.drow { align-items:flex-start; }
+.col-vname { flex:0 0 180px; min-width:0; font-weight:600; font-size:13.5px; color:#e6edf6; padding-top:8px; word-wrap:break-word; }
+.col-mode  { flex:0 0 156px; }
+.col-slots { flex:1 1 auto; min-width:0; }
+.col-vnote { flex:0 0 190px; }
+.slotbox { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+.slot { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.slot:last-child { margin-bottom:0; }
+.slot input { width:82px; flex:0 0 82px; text-align:center; }
+.slot .dash { color:#5b6a80; }
+.muted { font-size:12.5px; color:#5b6a80; padding-top:8px; }
+.rowlabels .col-vname { font-size:inherit; font-weight:inherit; color:inherit; padding-top:0; }
+.drow.is-hide .col-vname { color:#5b6a80; text-decoration:line-through; }
+
+.iconbtn {
+  width:30px; height:30px; padding:0; line-height:28px; text-align:center;
+  background:transparent; border:1px solid rgba(148,163,180,0.2); border-radius:8px;
+  color:#7f8ea3; font-size:15px; cursor:pointer; flex:0 0 auto;
+}
+.iconbtn:hover { border-color:rgba(255,128,128,.6); color:#ff8080; }
+.iconbtn.mv:hover { border-color:rgba(0,242,254,.6); color:#00f2fe; }
+
+.btn {
+  background:#00f2fe; color:#04121c; border:none; padding:11px 20px; border-radius:9px;
+  font-family:inherit; font-weight:600; font-size:13.5px; cursor:pointer; white-space:nowrap;
+}
+.btn:hover { background:#5cf7ff; }
+.btn.ghost { background:transparent; color:#cfe0ee; border:1px solid rgba(148,163,180,0.28); }
+.btn.ghost:hover { background:rgba(148,163,180,0.07); border-color:rgba(148,163,180,0.45); }
+.btn.tiny { padding:8px 13px; font-size:12.5px; font-weight:500; }
+.btn[disabled] { opacity:.5; cursor:default; }
+.rowtools { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+
+/* day picker */
+.daytabs { display:flex; flex-wrap:wrap; gap:8px; }
+.daybtn {
+  background:#060b14; border:1px solid rgba(148,163,180,0.2); color:#cfe0ee;
+  border-radius:9px; padding:9px 16px; font-family:inherit; font-size:13.5px; font-weight:500;
+  cursor:pointer; white-space:nowrap;
+}
+.daybtn:hover { border-color:rgba(148,163,180,0.45); }
+.daybtn.is-on { background:#00f2fe; border-color:#00f2fe; color:#04121c; font-weight:600; }
+.daybtn .today-dot {
+  display:inline-block; width:6px; height:6px; border-radius:50%; margin-left:7px; vertical-align:1px;
+  background:#00f2fe; box-shadow:0 0 7px rgba(0,242,254,.7);
+}
+.daybtn.is-on .today-dot { background:#04121c; box-shadow:none; }
+.daybtn.small { padding:6px 11px; font-size:12.5px; }
+.daybtn.is-pick { border-color:rgba(0,242,254,.65); color:#00f2fe; background:rgba(0,242,254,0.08); }
+.daybtn.is-src { opacity:.35; cursor:default; }
+
+.copybar {
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  margin:20px -24px -22px -24px; padding:14px 24px 16px 24px;
+  border-top:1px solid rgba(148,163,180,0.11);
+  background:rgba(148,163,180,0.03);
+  border-radius:0 0 14px 14px;
+}
+.copybar .lbl { font-size:12px; color:#7f8ea3; margin-right:4px; }
+.copymsg { font-size:12px; color:#00f2fe; margin-left:6px; }
+
+.sizegroup > h3 {
+  font-size:10.5px; font-weight:700; letter-spacing:.18em; text-transform:uppercase;
+  color:#00f2fe; margin-bottom:12px;
+}
+
+.help {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:14px; height:14px; border:1px solid rgba(0,242,254,0.45); color:#00f2fe;
+  border-radius:50%; font-size:9px; font-weight:700; cursor:help; flex:0 0 auto;
+}
+
+.jsonout textarea {
+  height:230px; font-family:Consolas,Menlo,monospace; font-size:11.5px;
+  color:#7f8ea3; line-height:1.5;
+}
+
+.backbtn {
+  display:none; position:fixed; top:14px; left:14px; z-index:60;
+  background:rgba(0,242,254,0.92); color:#04121c; border:none; cursor:pointer;
+  padding:9px 15px; border-radius:9px; font-family:inherit; font-weight:600; font-size:13px;
+}
+body.mode-preview .backbtn { display:block; }
+
+template { display:none; }
+@media (max-width:860px){
+  .ed-shell, .ed-top-row, .tabs { padding-left:16px; padding-right:16px; }
+  .ed-top-row { flex-wrap:wrap; gap:10px; }
+  .ed-actions { flex-wrap:wrap; }
+  .ed-status { white-space:normal; flex:1 1 100%; }
+  .duo { flex-wrap:wrap; }
+  .rrow { flex-wrap:wrap; }
+  .col-vname { flex:1 1 100%; padding-top:0; }
+  .col-mode, .col-vnote { flex:1 1 150px; }
+  .col-slots { flex:1 1 100%; }
+  .rowlabels { display:none; }
+  .fields > .field.w-half { flex:1 1 100%; }
+}
+</style>
+</head>
+<body>
+
+<script type="application/json" id="hours-data">
+{
+  "style": {
+    "fontFamily": "'Inter', Arial, sans-serif",
+    "szHeading": "1.05",
+    "szDay": "2.4",
+    "szTag": "1",
+    "szHeadRail": "1.05",
+    "szName": "1.7",
+    "szHours": "1.6",
+    "szNote": "1.25"
+  },
+  "layout": {
+    "railWidth": "17",
+    "widgetHeight": "140"
+  },
+  "rotation": {
+    "todaySec": "15",
+    "tomorrowSec": "15",
+    "dayStart": "04:00"
+  },
+  "display": {
+    "dimClosed": true,
+    "rowLayout": "stack"
+  },
+  "heading": "Opening Hours",
+  "labels": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "closed": "Closed",
+    "always": "Always open"
+  },
+  "dayNames": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+  ],
+  "venues": [
+    {
+      "id": "reception",
+      "name": "Reception"
+    },
+    {
+      "id": "noatun",
+      "name": "N\u00f3at\u00fan"
+    },
+    {
+      "id": "hotkitchen",
+      "name": "Hot Kitchen (N\u00f3at\u00fan)"
+    },
+    {
+      "id": "skansagardur",
+      "name": "Skansagar\u00f0ur"
+    },
+    {
+      "id": "munkastova",
+      "name": "Munkastova"
+    },
+    {
+      "id": "undirhusid",
+      "name": "Undirh\u00fasi\u00f0"
+    },
+    {
+      "id": "laterna",
+      "name": "Laterna Magica"
+    },
+    {
+      "id": "sjobudin",
+      "name": "Sj\u00f3b\u00fa\u00f0in"
+    },
+    {
+      "id": "fitness",
+      "name": "Fitness"
+    },
+    {
+      "id": "pool",
+      "name": "Swimming pool / Sauna"
+    }
+  ],
+  "hours": {
+    "sun": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "mon": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "tue": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "wed": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "thu": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "fri": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    },
+    "sat": {
+      "reception": {
+        "mode": "always",
+        "slots": []
+      },
+      "noatun": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "18:00"
+          }
+        ]
+      },
+      "hotkitchen": {
+        "mode": "closed",
+        "slots": []
+      },
+      "skansagardur": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "10:00"
+          },
+          {
+            "from": "18:30",
+            "to": "22:00"
+          }
+        ]
+      },
+      "munkastova": {
+        "mode": "closed",
+        "slots": []
+      },
+      "undirhusid": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "17:00",
+            "to": ""
+          }
+        ]
+      },
+      "laterna": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": ""
+          }
+        ]
+      },
+      "sjobudin": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "08:00",
+            "to": "10:00"
+          }
+        ]
+      },
+      "fitness": {
+        "mode": "open",
+        "slots": [
+          {
+            "from": "07:00",
+            "to": "19:00"
+          }
+        ]
+      },
+      "pool": {
+        "mode": "closed",
+        "slots": []
+      }
+    }
+  }
+}
+</script>
+
+<div class="stage">
+  <aside class="rail" id="uiRail">
+    <div class="module-header main"><span id="uiHeading"></span></div>
+    <div class="hours" id="uiHours">
+      <div class="daypane is-on" id="uiPane0"></div>
+      <div class="daypane" id="uiPane1"></div>
+    </div>
+    <div class="dayswitch">
+      <div class="seg is-on" id="uiSeg0"><div class="seg-label" id="uiSegLabel0"></div><div class="track"><div class="track-fill"><span class="track-dot"></span></div></div></div>
+      <div class="seg" id="uiSeg1"><div class="seg-label" id="uiSegLabel1"></div><div class="track"><div class="track-fill"><span class="track-dot"></span></div></div></div>
+    </div>
+  </aside>
+  <iframe class="widget" id="uiWidget" title="Infoscreen widget" scrolling="no" frameborder="0" allowtransparency="true"></iframe>
+</div>
+
+<button type="button" class="backbtn" id="uiBack">Tilbage til editor</button>
+
+<div class="editor">
+
+  <div class="ed-top">
+    <div class="ed-top-row">
+      <div>
+        <div class="ed-title"><span class="dot"></span>Norr&#246;na &#197;bningstider</div>
+        <div class="ed-sub">Sk&#230;rmen henter nye data hvert minut efter du synkroniserer.</div>
+      </div>
+      <div class="ed-spacer"></div>
+      <div class="ed-actions">
+        <div class="ed-status" id="edStatus"></div>
+        <button type="button" class="btn ghost" id="edPreview">Se sk&#230;rmen</button>
+        <button type="button" class="btn" id="edSave">Synkronis&#233;r</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button type="button" class="tabbtn is-on" data-tab="hours">&#197;bningstider</button>
+      <button type="button" class="tabbtn" data-tab="venues">Steder</button>
+      <button type="button" class="tabbtn" data-tab="rail">Sidepanel</button>
+      <button type="button" class="tabbtn" data-tab="look">Udseende</button>
+      <button type="button" class="tabbtn" data-tab="adv">Avanceret</button>
+    </div>
+  </div>
+
+  <div class="ed-shell">
+
+    <!-- ============ AABNINGSTIDER ============ -->
+    <div class="tabpane is-on" data-pane="hours">
+
+      <div class="card">
+        <div class="card-head">
+          <h2>V&#230;lg dag</h2>
+          <p>Hver dag har sine egne tider. Sk&#230;rmen viser i dag og i morgen p&#229; skift. Den lille prik markerer hvilken dag sk&#230;rmen kalder "i dag" lige nu.</p>
+        </div>
+        <div class="daytabs" id="edDayTabs"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 id="edDayTitle">Mandag</h2>
+          <p>Skriv tider som 0700, 7:00 eller 7 &#8212; de rettes selv til 07:00. Lad "til" st&#229; tomt hvis kun starttiden skal vises. "Skjul denne dag" fjerner stedet fra sk&#230;rmen den dag.</p>
+        </div>
+        <div class="rowlabels">
+          <div class="col-vname">Sted</div>
+          <div class="col-mode">Visning</div>
+          <div class="col-slots">Tider</div>
+          <div class="col-vnote">Note under tiderne</div>
+        </div>
+        <div class="rows" id="edDayRows"></div>
+        <div class="copybar">
+          <span class="lbl">Kopi&#233;r <b id="edCopyFrom">mandag</b> til:</span>
+          <span class="daytabs" id="edCopyTabs"></span>
+          <button type="button" class="btn ghost tiny" id="edCopy">Kopi&#233;r</button>
+          <button type="button" class="btn ghost tiny" id="edCopyAll">Kopi&#233;r til alle dage</button>
+          <span class="copymsg" id="edCopyMsg"></span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ STEDER ============ -->
+    <div class="tabpane" data-pane="venues">
+      <div class="card">
+        <div class="card-head">
+          <h2>Steder</h2>
+          <p>Listen g&#230;lder alle dage. R&#230;kkef&#248;lgen her er r&#230;kkef&#248;lgen p&#229; sk&#230;rmen. Et nyt sted st&#229;r som "Lukket" indtil du giver det tider under &#197;bningstider.</p>
+        </div>
+        <div class="rowlabels">
+          <div class="col-title">Navn p&#229; sk&#230;rmen</div>
+          <div class="col-move">Flyt</div>
+          <div class="col-del"></div>
+        </div>
+        <div class="rows" id="edVenues"></div>
+        <div class="rowtools">
+          <button type="button" class="btn ghost tiny" id="edAddVenue">+ Tilf&#248;j sted</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SIDEPANEL ============ -->
+    <div class="tabpane" data-pane="rail">
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Overskrift &#248;verst</h2>
+          <p>Teksten der st&#229;r over &#229;bningstiderne.</p>
+        </div>
+        <div class="fields">
+          <div class="field w-half"><label>Tekst</label><input id="edHeading" placeholder="Opening Hours"></div>
+        </div>
+        <div class="szbar">
+          <span class="szbar-label">St&#248;rrelse</span>
+          <div class="sz"><label>Overskrift</label><div class="num"><input id="edSzHeading" type="number" step="0.05" placeholder="1.05"><span class="unit">vh</span></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Skift mellem dagene</h2>
+          <p>Hvor l&#230;nge hver dag st&#229;r p&#229; sk&#230;rmen. S&#230;t "I morgen" til 0 for kun at vise i dag. Dagen skifter p&#229; det klokkesl&#230;t du v&#230;lger &#8212; st&#229;r det p&#229; 04:00, h&#248;rer en bar der lukker kl. 02 stadig til aftenen f&#248;r. Alle tider er skibstid (f&#230;r&#248;sk tid).</p>
+        </div>
+        <div class="fields">
+          <div class="field w-num"><label>Vis i dag</label><div class="num"><input id="edTodaySec" type="number" min="3" placeholder="15"><span class="unit">sek</span></div></div>
+          <div class="field w-num"><label>Vis i morgen</label><div class="num"><input id="edTomorrowSec" type="number" min="0" placeholder="15"><span class="unit">sek</span></div></div>
+          <div class="field w-num"><label>Ny dag kl.</label><input id="edDayStart" class="js-clock" placeholder="04:00"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Dagene</h2>
+          <p>Dagens navn st&#229;r &#248;verst i listen med et m&#230;rke ved siden af. Navnene bruges ogs&#229; i dag-skifteren i bunden af panelet.</p>
+        </div>
+        <div class="fields">
+          <div class="field w-num"><label>M&#230;rke i dag</label><input id="edLblToday" placeholder="Today"></div>
+          <div class="field w-num"><label>M&#230;rke i morgen</label><input id="edLblTomorrow" placeholder="Tomorrow"></div>
+        </div>
+        <div class="fields" style="margin-top:16px">
+          <div class="field w-day"><label>Mandag</label><input id="edDN1" placeholder="Monday"></div>
+          <div class="field w-day"><label>Tirsdag</label><input id="edDN2" placeholder="Tuesday"></div>
+          <div class="field w-day"><label>Onsdag</label><input id="edDN3" placeholder="Wednesday"></div>
+          <div class="field w-day"><label>Torsdag</label><input id="edDN4" placeholder="Thursday"></div>
+          <div class="field w-day"><label>Fredag</label><input id="edDN5" placeholder="Friday"></div>
+          <div class="field w-day"><label>L&#248;rdag</label><input id="edDN6" placeholder="Saturday"></div>
+          <div class="field w-day"><label>S&#248;ndag</label><input id="edDN0" placeholder="Sunday"></div>
+        </div>
+        <div class="szbar">
+          <span class="szbar-label">St&#248;rrelser</span>
+          <div class="sz"><label>Dagens navn</label><div class="num"><input id="edSzDay" type="number" step="0.1" placeholder="2.4"><span class="unit">vh</span></div></div>
+          <div class="sz"><label>M&#230;rke</label><div class="num"><input id="edSzTag" type="number" step="0.05" placeholder="1.0"><span class="unit">vh</span></div></div>
+          <div class="sz"><label>Dag-skifter <span class="help" title="De to dagnavne med statusbj&#230;lken i bunden af panelet">?</span></label><div class="num"><input id="edSzHeadRail" type="number" step="0.05" placeholder="1.05"><span class="unit">vh</span></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Steder og tider</h2>
+          <p>Teksterne der vises for "Lukket" og "Altid &#229;ben". Er der flere steder end der er plads til, g&#248;r sk&#230;rmen selv skriften lidt mindre s&#229; alt kan ses.</p>
+        </div>
+        <div class="fields">
+          <div class="field w-num"><label>Lukket</label><input id="edLblClosed" placeholder="Closed"></div>
+          <div class="field w-num"><label>Altid &#229;ben</label><input id="edLblAlways" placeholder="Always open"></div>
+          <div class="field w-num">
+            <label>D&#230;mp lukkede</label>
+            <select id="edDimClosed"><option value="1">Ja</option><option value="0">Nej</option></select>
+          </div>
+          <div class="field w-num">
+            <label>Opstilling</label>
+            <select id="edRowLayout"><option value="stack">Navn over tider</option><option value="row">Navn og tider p&#229; linje</option></select>
+          </div>
+        </div>
+        <div class="szbar">
+          <span class="szbar-label">St&#248;rrelser</span>
+          <div class="sz"><label>Sted</label><div class="num"><input id="edSzName" type="number" step="0.1" placeholder="1.7"><span class="unit">vh</span></div></div>
+          <div class="sz"><label>Tider</label><div class="num"><input id="edSzHours" type="number" step="0.1" placeholder="1.6"><span class="unit">vh</span></div></div>
+          <div class="sz"><label>Note</label><div class="num"><input id="edSzNote" type="number" step="0.05" placeholder="1.25"><span class="unit">vh</span></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ UDSEENDE ============ -->
+    <div class="tabpane" data-pane="look">
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Skrifttype</h2>
+          <p>G&#230;lder hele panelet. De enkelte st&#248;rrelser st&#229;r nede i bunden af hvert felt under Sidepanel.</p>
+        </div>
+        <div class="fields">
+          <div class="field w-half">
+            <label>Font</label>
+            <select id="edFontFamily">
+              <option value="'Inter', Arial, sans-serif">Inter (standard)</option>
+              <option value="'Montserrat', sans-serif">Montserrat</option>
+              <option value="'Roboto', Arial, sans-serif">Roboto</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="Arial, sans-serif">Arial</option>
+            </select>
+          </div>
+        </div>
+        <div class="rowtools">
+          <button type="button" class="btn ghost tiny" id="edResetSizes">Nulstil alle st&#248;rrelser</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Pladsfordeling</h2>
+          <p>Panelets bredde i procent af sk&#230;rmen. Widgetten i bunden er 140 px h&#248;j &#8212; ret kun h&#248;jden hvis selve widgetten bliver &#230;ndret.</p>
+        </div>
+        <div class="fields">
+          <div class="field w-num"><label>H&#248;jre panel</label><div class="num"><input id="edRailWidth" type="number" placeholder="17"><span class="unit">%</span></div></div>
+          <div class="field w-num"><label>Widget-h&#248;jde</label><div class="num"><input id="edWidgetHeight" type="number" placeholder="140"><span class="unit">px</span></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ AVANCERET ============ -->
+    <div class="tabpane" data-pane="adv">
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Data</h2>
+          <p>Det der sendes til Cloudflare n&#229;r du synkroniserer. Skrivebeskyttet &#8212; ret i fanerne ovenfor.</p>
+        </div>
+        <div class="jsonout"><textarea id="edOut" readonly></textarea></div>
+      </div>
+
+      <div class="card sub">
+        <div class="card-head">
+          <h2>Nulstil</h2>
+          <p>Henter de testtider der ligger i selve filen. Det du har st&#229;ende bliver kun overskrevet her i browseren &#8212; sk&#230;rmen &#230;ndrer sig f&#248;rst n&#229;r du synkroniserer.</p>
+        </div>
+        <button type="button" class="btn ghost tiny" id="edReset">Indl&#230;s testtider</button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<template id="tplDay">
+  <div class="rrow drow js-drow">
+    <div class="col-vname js-vname"></div>
+    <div class="col-mode">
+      <select class="js-mode">
+        <option value="open">Tidsrum</option>
+        <option value="always">Altid &#229;ben</option>
+        <option value="closed">Lukket</option>
+        <option value="text">Fri tekst</option>
+        <option value="hide">Skjul denne dag</option>
+      </select>
+    </div>
+    <div class="col-slots">
+      <div class="slotbox js-slotbox">
+        <div class="js-slots"></div>
+        <button type="button" class="btn ghost tiny js-addslot">+ Tidsrum</button>
+      </div>
+      <input class="js-text" placeholder="F.eks. From 17:00">
+      <div class="muted js-muted"></div>
+    </div>
+    <div class="col-vnote"><input class="js-vnote" placeholder="Valgfri"></div>
+  </div>
+</template>
+
+<template id="tplSlot">
+  <div class="slot js-slot">
+    <input class="js-from js-clock" placeholder="fra">
+    <span class="dash">&#8211;</span>
+    <input class="js-to js-clock" placeholder="til">
+    <button type="button" class="iconbtn js-delslot" title="Fjern tidsrum">&#215;</button>
+  </div>
+</template>
+
+<template id="tplVenue">
+  <div class="rrow js-venue">
+    <div class="col-title"><input class="js-vname-in" placeholder="Navn p&#229; stedet"></div>
+    <div class="col-move">
+      <button type="button" class="iconbtn mv js-up" title="Flyt op">&#8593;</button>
+      <button type="button" class="iconbtn mv js-down" title="Flyt ned">&#8595;</button>
+    </div>
+    <div class="col-del"><button type="button" class="iconbtn js-del" title="Fjern">&#215;</button></div>
+  </div>
+</template>
+
+<script>
+(function () {
+  'use strict';
+
+  /* The Cloudflare Worker that stores the data (see worker.js). */
+  var REMOTE_URL = 'https://norrona-hours-api.kronborgnielsen.workers.dev';
+  /* The Infoscreen widget, unchanged, next to this file. */
+  var WIDGET_URL = 'widget.html';
+
+  var REMOTE_REFRESH_MS = 60000;
+  var TICK_MS = 30000;
+  var CACHE_KEY = 'norrona-hours';
+
+  var DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var DA_DAYS = ['S\u00f8ndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'L\u00f8rdag'];
+  var DA_SHORT = ['S\u00f8n', 'Man', 'Tir', 'Ons', 'Tor', 'Fre', 'L\u00f8r'];
+  var EDIT_ORDER = [1, 2, 3, 4, 5, 6, 0];
+  var EN_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  var data = null;
+  var timers = [];
+  var rotTimer = null;
+  var dayIndex = 0;          /* 0 = today, 1 = tomorrow */
+  var shownDay = -1;         /* weekday currently treated as today */
+
+  function $(id) { return document.getElementById(id); }
+  function q(el, sel) { return el.querySelector(sel); }
+  function qa(el, sel) { return el.querySelectorAll(sel); }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function trim(s) { return ('' + (s == null ? '' : s)).replace(/^\s+|\s+$/g, ''); }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  /* ---------------- ship time ----------------
+     Same rule as the widget and the cinema screen: always Faroe time,
+     worked out from UTC. EU summer time runs from the last Sunday in
+     March 01:00 UTC to the last Sunday in October 01:00 UTC. */
+  function lastSundayUTC(year, monthIndex) {
+    var lastDay = new Date(Date.UTC(year, monthIndex + 1, 0));
+    return lastDay.getUTCDate() - lastDay.getUTCDay();
+  }
+  function isFaroeDST(ms) {
+    var year = new Date(ms).getUTCFullYear();
+    var start = Date.UTC(year, 2, lastSundayUTC(year, 2), 1, 0, 0);
+    var end = Date.UTC(year, 9, lastSundayUTC(year, 9), 1, 0, 0);
+    return ms >= start && ms < end;
+  }
+  /* Read this date with the getUTC* methods - the offset is already in it. */
+  function faroeNow() {
+    var ms = (new Date()).getTime();
+    return new Date(ms + (isFaroeDST(ms) ? 3600000 : 0));
+  }
+
+  function lines(node, s) {
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+    var parts = ('' + (s || '')).split('\n');
+    for (var i = 0; i < parts.length; i++) {
+      var span = document.createElement('span');
+      span.appendChild(document.createTextNode(parts[i]));
+      node.appendChild(span);
+    }
+  }
+  function txt(node, s) {
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+    node.appendChild(document.createTextNode(s == null ? '' : s));
+  }
+  function el(tag, cls) {
+    var n = document.createElement(tag);
+    if (cls) { n.className = cls; }
+    return n;
+  }
+  function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+
+  /* ---------------- data ---------------- */
+
+  function valid(o) { return !!(o && o.venues && o.venues.length && o.hours); }
+
+  function readLocal() {
+    var node = $('hours-data');
+    try { return JSON.parse(node.textContent || node.innerText); }
+    catch (e) { return { venues: [], hours: {} }; }
+  }
+  function cacheSet(o) {
+    try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(o)); } catch (e) {}
+  }
+  function cacheGet() {
+    try {
+      var o = JSON.parse(window.localStorage.getItem(CACHE_KEY));
+      return valid(o) ? o : null;
+    } catch (e) { return null; }
+  }
+
+  function loadRemote(cb) {
+    if (!REMOTE_URL) { cb(null); return; }
+    var done = false;
+    function finish(o) { if (!done) { done = true; cb(o); } }
+    var url = REMOTE_URL + (REMOTE_URL.indexOf('?') > -1 ? '&' : '?') + '_=' + (new Date()).getTime();
+    var xhr = new XMLHttpRequest();
+    try { xhr.open('GET', url, true); } catch (e0) { finish(null); return; }
+    if ('timeout' in xhr) { xhr.timeout = 15000; }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          var o = JSON.parse(xhr.responseText);
+          if (valid(o)) { cacheSet(o); finish(o); return; }
+        } catch (e) {}
+      }
+      finish(null);
+    };
+    xhr.ontimeout = function () { finish(null); };
+    xhr.onerror = function () { finish(null); };
+    try { xhr.send(); } catch (e2) { finish(null); }
+  }
+
+  /* ---------------- helpers ---------------- */
+
+  function minutesOf(hhmm) {
+    if (!hhmm) { return -1; }
+    var p = ('' + hhmm).split(':');
+    var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h)) { return -1; }
+    if (isNaN(m)) { m = 0; }
+    return h * 60 + m;
+  }
+  function clockOf(mins) {
+    var m = ((mins % 1440) + 1440) % 1440;
+    return pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+  }
+  function nowMinutes() {
+    var d = faroeNow();
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  }
+  /* "7" -> 07:00, "730" -> 07:30, "7.30" -> 07:30, "1800" -> 18:00 */
+  function normClock(s) {
+    var v = trim(s);
+    if (!v) { return ''; }
+    var m = /^(\d{1,2})(?:[:.,h ]?(\d{2}))?$/.exec(v);
+    if (!m) { return v; }
+    var h = parseInt(m[1], 10), mi = m[2] ? parseInt(m[2], 10) : 0;
+    if (h > 24 || mi > 59) { return v; }
+    if (h === 24) { h = 0; }
+    return pad(h) + ':' + pad(mi);
+  }
+  function numSetting(v, def, min) {
+    var n = parseFloat(v);
+    if (isNaN(n)) { return def; }
+    if (min != null && n < min) { return min; }
+    return n;
+  }
+
+  function rot() { return data.rotation || {}; }
+  function todaySec() { return numSetting(rot().todaySec, 15, 3); }
+  function tomorrowSec() { return numSetting(rot().tomorrowSec, 15, 0); }
+  function dayStartMin() {
+    var m = minutesOf(rot().dayStart == null ? '04:00' : rot().dayStart);
+    return (m < 0 || m >= 1440) ? 0 : m;
+  }
+  /* The weekday the screen calls "today": ship time, moved back by the
+     day-start setting so late opening hours stay with the evening before. */
+  function serviceDay() {
+    var d = faroeNow();
+    return (new Date(d.getTime() - dayStartMin() * 60000)).getUTCDay();
+  }
+  function label(key) {
+    var l = data.labels || {};
+    if (key === 'today') { return l.today || 'Today'; }
+    if (key === 'tomorrow') { return l.tomorrow || 'Tomorrow'; }
+    if (key === 'closed') { return l.closed || 'Closed'; }
+    if (key === 'always') { return l.always || 'Always open'; }
+    return '';
+  }
+  function dayName(i) {
+    var n = data.dayNames && data.dayNames[i];
+    return n || EN_DAYS[i];
+  }
+  function entryOf(hours, dayIdx, id) {
+    var day = hours && hours[DAY_KEYS[dayIdx]];
+    return (day && day[id]) ? day[id] : { mode: 'closed' };
+  }
+
+  /* ---------------- screen ---------------- */
+
+  function renderPane(pane, dayIdx, isToday) {
+    clear(pane);
+    var inner = el('div', 'daypane-inner');
+
+    var head = el('div', 'dayhead');
+    var dn = el('div', 'dayname');
+    txt(dn, dayName(dayIdx));
+    head.appendChild(dn);
+    var tag = el('span', isToday ? 'tag live' : 'tag');
+    txt(tag, label(isToday ? 'today' : 'tomorrow'));
+    head.appendChild(tag);
+    inner.appendChild(head);
+
+    var dim = !(data.display && (data.display.dimClosed === false || data.display.dimClosed === '0'));
+    var venues = data.venues || [];
+    for (var i = 0; i < venues.length; i++) {
+      var v = venues[i];
+      if (!v || !trim(v.name)) { continue; }
+      var e = entryOf(data.hours, dayIdx, v.id);
+      var mode = e.mode || 'closed';
+      if (mode === 'hide') { continue; }
+
+      var shown = [];
+      if (mode === 'open') {
+        var slots = e.slots || [];
+        for (var k = 0; k < slots.length; k++) {
+          var f = trim(slots[k].from), t = trim(slots[k].to);
+          if (!f && !t) { continue; }
+          shown.push(f && t ? f + ' \u2013 ' + t : (f || t));
+        }
+        if (!shown.length) { mode = 'closed'; }
+      } else if (mode === 'text') {
+        if (trim(e.text)) { shown.push(trim(e.text)); } else { mode = 'closed'; }
+      }
+      if (mode === 'closed') { shown = [label('closed')]; }
+      if (mode === 'always') { shown = [label('always')]; }
+
+      var card = el('div', 'venue is-' + mode + (mode === 'closed' && dim ? ' is-dim' : ''));
+      var nm = el('div', 'name');
+      txt(nm, v.name);
+      card.appendChild(nm);
+      var sl = el('div', 'slots');
+      lines(sl, shown.join('\n'));
+      card.appendChild(sl);
+      if (trim(e.note)) {
+        var no = el('div', 'vnote');
+        txt(no, trim(e.note));
+        card.appendChild(no);
+      }
+      inner.appendChild(card);
+    }
+    pane.appendChild(inner);
+  }
+
+  function setFit(f) { document.body.style.setProperty('--fit', '' + f); }
+
+  /* Shrink everything a little at a time until both days fit the panel,
+     so a long list never runs off the bottom. Both days share the same
+     scale, so nothing jumps when the panel switches day. */
+  function overflows() {
+    for (var i = 0; i < 2; i++) {
+      var pane = $('uiPane' + i);
+      var inner = pane.firstChild;
+      if (inner && inner.offsetHeight > pane.clientHeight + 1) { return true; }
+    }
+    return false;
+  }
+  function applyFit() {
+    var f = 1;
+    setFit(f);
+    if (!$('uiPane0').clientHeight) { return; }
+    while (f > 0.5 && overflows()) {
+      f = Math.round((f - 0.03) * 100) / 100;
+      setFit(f);
+    }
+  }
+
+  function renderHours() {
+    var t = serviceDay();
+    shownDay = t;
+    renderPane($('uiPane0'), t, true);
+    renderPane($('uiPane1'), (t + 1) % 7, false);
+    txt($('uiSegLabel0'), dayName(t));
+    txt($('uiSegLabel1'), dayName((t + 1) % 7));
+    applyFit();
+  }
+
+  function renderHead() {
+    txt($('uiHeading'), data.heading || 'Opening Hours');
+  }
+
+  function animateSeg(i, sec) {
+    var k, seg, fill;
+    for (k = 0; k < 2; k++) {
+      seg = $('uiSeg' + k);
+      fill = q(seg, '.track-fill');
+      fill.style.webkitTransition = 'none';
+      fill.style.transition = 'none';
+      fill.style.width = '0%';
+      seg.className = 'seg' + (k === i ? ' is-on' : '');
+    }
+    fill = q($('uiSeg' + i), '.track-fill');
+    /* force a layout so the browser sees the reset before the new run */
+    void fill.offsetWidth;
+    fill.style.webkitTransition = 'width ' + sec + 's linear';
+    fill.style.transition = 'width ' + sec + 's linear';
+    fill.style.width = '100%';
+  }
+
+  function showDay(i) {
+    if (rotTimer) { window.clearTimeout(rotTimer); rotTimer = null; }
+    var rail = $('uiRail');
+    var rotating = tomorrowSec() > 0;
+    if (!rotating) { i = 0; }
+    dayIndex = i;
+    $('uiPane0').className = 'daypane' + (i === 0 ? ' is-on' : '');
+    $('uiPane1').className = 'daypane' + (i === 1 ? ' is-on' : '');
+    rail.className = 'rail' + (rotating ? '' : ' no-rotate');
+    if (!rotating) { return; }
+    var sec = (i === 0) ? todaySec() : tomorrowSec();
+    animateSeg(i, sec);
+    rotTimer = window.setTimeout(function () {
+      rotTimer = null;
+      showDay(dayIndex === 0 ? 1 : 0);
+    }, sec * 1000);
+  }
+
+  /* after new data: keep the rotation running, only react if it was
+     switched on or off */
+  function syncRotation() {
+    var rotating = tomorrowSec() > 0;
+    if (!rotating && (rotTimer || dayIndex !== 0)) { showDay(0); }
+    else if (rotating && !rotTimer) { showDay(dayIndex); }
+  }
+
+  function applyLayout() {
+    var st = data.style || {};
+    var b = document.body.style;
+    b.setProperty('--font-family', st.fontFamily || "'Inter', Arial, sans-serif");
+    b.setProperty('--sz-heading', (st.szHeading || 1.05) + 'vh');
+    b.setProperty('--sz-day', (st.szDay || 2.4) + 'vh');
+    b.setProperty('--sz-tag', (st.szTag || 1.0) + 'vh');
+    b.setProperty('--sz-name', (st.szName || 1.7) + 'vh');
+    b.setProperty('--sz-hours', (st.szHours || 1.6) + 'vh');
+    b.setProperty('--sz-note', (st.szNote || 1.25) + 'vh');
+    b.setProperty('--sz-head-rail', (st.szHeadRail || 1.05) + 'vh');
+
+    var ly = data.layout || {};
+    var rWidth = numSetting(ly.railWidth, 17);
+    var wHeight = numSetting(ly.widgetHeight, 140);
+    if (rWidth < 5) { rWidth = 17; }
+    if (wHeight < 0) { wHeight = 140; }
+
+    var cls = document.body.className;
+    var railOnly = cls.indexOf('mode-rail') > -1;
+
+    var disp = data.display || {};
+    var rowLayout = disp.rowLayout === 'row';
+    if (rowLayout && cls.indexOf('hours-row') < 0) { document.body.className = cls + ' hours-row'; }
+    if (!rowLayout && cls.indexOf('hours-row') > -1) { document.body.className = cls.replace(/\s*hours-row/g, ''); }
+
+    var rail = $('uiRail');
+    var widget = $('uiWidget');
+    widget.style.height = wHeight + 'px';
+    if (!railOnly) {
+      rail.style.width = rWidth + 'vw';
+      rail.style.bottom = wHeight + 'px';
+    } else {
+      rail.style.width = '';
+      rail.style.bottom = '';
+    }
+    var w = rail.offsetWidth || 0;
+    var padPx = Math.round(w * 0.055);
+    if (padPx < 6) { padPx = 6; }
+    if (padPx > 40) { padPx = 40; }
+    rail.style.paddingLeft = padPx + 'px';
+    rail.style.paddingRight = padPx + 'px';
+  }
+
+  function startWidget() {
+    var f = $('uiWidget');
+    if (f.getAttribute('data-on') === '1') { return; }
+    if (document.body.className.indexOf('mode-rail') > -1 || param('nowidget')) { return; }
+    f.setAttribute('data-on', '1');
+    f.src = param('widget') || WIDGET_URL;
+  }
+
+  function renderAll() {
+    applyLayout();
+    renderHead();
+    renderHours();
+  }
+
+  function param(name) {
+    var m = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    if (m) { return decodeURIComponent(m[1]); }
+    return (new RegExp('[?&]' + name + '(&|$)').test(window.location.search)) ? '1' : '';
+  }
+
+  /* ---------------- back office ---------------- */
+
+  var edVenues = [];
+  var edHours = {};
+  var edDay = -1;
+  var copyPick = {};
+  var idSeq = 0;
+
+  function status(text, cls) {
+    var n = $('edStatus');
+    n.className = 'ed-status' + (cls ? ' ' + cls : '');
+    txt(n, text || '');
+  }
+  function dirty() { status('Ikke synkroniseret', 'dirty'); }
+
+  var SIZE_DEFAULTS = {
+    edSzHeading: '1.05', edSzDay: '2.4', edSzTag: '1', edSzHeadRail: '1.05',
+    edSzName: '1.7', edSzHours: '1.6', edSzNote: '1.25'
+  };
+  function resetSizes() {
+    for (var id in SIZE_DEFAULTS) {
+      if (SIZE_DEFAULTS.hasOwnProperty(id)) { $(id).value = SIZE_DEFAULTS[id]; }
+    }
+    buildJson();
+    dirty();
+  }
+
+  function showTab(name) {
+    var panes = document.getElementsByClassName('tabpane');
+    var btns = document.getElementsByClassName('tabbtn');
+    var k;
+    for (k = 0; k < panes.length; k++) {
+      panes[k].className = 'tabpane' + (panes[k].getAttribute('data-pane') === name ? ' is-on' : '');
+    }
+    for (k = 0; k < btns.length; k++) {
+      btns[k].className = 'tabbtn' + (btns[k].getAttribute('data-tab') === name ? ' is-on' : '');
+    }
+    if (name === 'hours') { renderDayRows(); }
+  }
+
+  function bindTabs() {
+    var btns = document.getElementsByClassName('tabbtn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].onclick = (function (name) {
+        return function () { syncFromForm(); showTab(name); return false; };
+      })(btns[i].getAttribute('data-tab'));
+    }
+  }
+
+  function tpl(id) {
+    var t = $(id);
+    var frag = t.content.cloneNode(true);
+    var node = frag.firstElementChild || frag.firstChild;
+    while (node && node.nodeType !== 1) { node = node.nextSibling; }
+    return node;
+  }
+
+  /* --- day picker --- */
+  function renderDayTabs() {
+    var host = $('edDayTabs');
+    var today = serviceDay();
+    clear(host);
+    for (var i = 0; i < EDIT_ORDER.length; i++) {
+      var d = EDIT_ORDER[i];
+      var b = el('button', 'daybtn' + (d === edDay ? ' is-on' : ''));
+      b.type = 'button';
+      txt(b, DA_DAYS[d]);
+      if (d === today) {
+        var dot = el('span', 'today-dot');
+        dot.title = 'I dag';
+        b.appendChild(dot);
+      }
+      b.onclick = (function (day) {
+        return function () {
+          readDayRows();
+          edDay = day;
+          copyPick = {};
+          renderDayTabs();
+          renderDayRows();
+        };
+      })(d);
+      host.appendChild(b);
+    }
+    renderCopyTabs();
+  }
+
+  function renderCopyTabs() {
+    var host = $('edCopyTabs');
+    clear(host);
+    for (var i = 0; i < EDIT_ORDER.length; i++) {
+      var d = EDIT_ORDER[i];
+      var cls = 'daybtn small';
+      if (d === edDay) { cls += ' is-src'; } else if (copyPick[d]) { cls += ' is-pick'; }
+      var b = el('button', cls);
+      b.type = 'button';
+      txt(b, DA_SHORT[d]);
+      if (d !== edDay) {
+        b.onclick = (function (day) {
+          return function () { copyPick[day] = !copyPick[day]; renderCopyTabs(); };
+        })(d);
+      }
+      host.appendChild(b);
+    }
+    txt($('edCopyFrom'), DA_DAYS[edDay].toLowerCase());
+  }
+
+  /* --- one row per venue for the chosen day --- */
+  function addSlot(row, s) {
+    var box = q(row, '.js-slots');
+    var slot = tpl('tplSlot');
+    box.appendChild(slot);
+    q(slot, '.js-from').value = s ? (s.from || '') : '';
+    q(slot, '.js-to').value = s ? (s.to || '') : '';
+    q(slot, '.js-delslot').onclick = function () {
+      slot.parentNode.removeChild(slot);
+      if (!qa(row, '.js-slot').length) { addSlot(row, null); }
+      syncFromForm(); dirty();
+    };
+    return slot;
+  }
+
+  function updateRowMode(row) {
+    var mode = q(row, '.js-mode').value;
+    q(row, '.js-slotbox').style.display = mode === 'open' ? '' : 'none';
+    q(row, '.js-text').style.display = mode === 'text' ? '' : 'none';
+    var muted = q(row, '.js-muted');
+    muted.style.display = (mode === 'open' || mode === 'text') ? 'none' : '';
+    var lb = {
+      always: 'Vises som "' + trim($('edLblAlways').value || 'Always open') + '"',
+      closed: 'Vises som "' + trim($('edLblClosed').value || 'Closed') + '"',
+      hide: 'Stedet vises ikke denne dag'
+    };
+    txt(muted, lb[mode] || '');
+    row.className = 'rrow drow js-drow' + (mode === 'hide' ? ' is-hide' : '');
+  }
+
+  function renderDayRows() {
+    if (edDay < 0) { return; }
+    var host = $('edDayRows');
+    clear(host);
+    var t = serviceDay();
+    var title = DA_DAYS[edDay];
+    if (edDay === t) { title += ' \u00b7 i dag'; }
+    else if (edDay === (t + 1) % 7) { title += ' \u00b7 i morgen'; }
+    txt($('edDayTitle'), title);
+
+    var any = false;
+    for (var i = 0; i < edVenues.length; i++) {
+      var v = edVenues[i];
+      if (!trim(v.name)) { continue; }
+      any = true;
+      var e = entryOf(edHours, edDay, v.id);
+      var row = tpl('tplDay');
+      row.setAttribute('data-id', v.id);
+      host.appendChild(row);
+      txt(q(row, '.js-vname'), v.name);
+      q(row, '.js-mode').value = e.mode || 'closed';
+      var slots = e.slots || [];
+      for (var k = 0; k < slots.length; k++) { addSlot(row, slots[k]); }
+      if (!slots.length) { addSlot(row, null); }
+      q(row, '.js-text').value = e.text || '';
+      q(row, '.js-vnote').value = e.note || '';
+      (function (r) {
+        q(r, '.js-mode').onchange = function () { updateRowMode(r); };
+        q(r, '.js-addslot').onclick = function () {
+          var s = addSlot(r, null);
+          q(s, '.js-from').focus();
+          syncFromForm(); dirty();
+        };
+      })(row);
+      updateRowMode(row);
+    }
+    if (!any) {
+      var m = el('div', 'muted');
+      txt(m, 'Ingen steder endnu - tilf\u00f8j dem under fanen Steder.');
+      host.appendChild(m);
+    }
+    renderCopyTabs();
+  }
+
+  function readDayRows() {
+    if (edDay < 0) { return; }
+    var rows = $('edDayRows').getElementsByClassName('js-drow');
+    if (!rows.length) { return; }
+    var key = DAY_KEYS[edDay];
+    var day = edHours[key] || {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var id = r.getAttribute('data-id');
+      var slots = [];
+      var sl = qa(r, '.js-slot');
+      for (var k = 0; k < sl.length; k++) {
+        var f = trim(q(sl[k], '.js-from').value), t = trim(q(sl[k], '.js-to').value);
+        if (f || t) { slots.push({ from: f, to: t }); }
+      }
+      var e = { mode: q(r, '.js-mode').value, slots: slots };
+      var text = trim(q(r, '.js-text').value);
+      var note = trim(q(r, '.js-vnote').value);
+      if (text) { e.text = text; }
+      if (note) { e.note = note; }
+      day[id] = e;
+    }
+    edHours[key] = day;
+  }
+
+  function copyDay(targets) {
+    readDayRows();
+    var src = clone(edHours[DAY_KEYS[edDay]] || {});
+    var n = 0;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i] === edDay) { continue; }
+      edHours[DAY_KEYS[targets[i]]] = clone(src);
+      n++;
+    }
+    copyPick = {};
+    renderCopyTabs();
+    if (n) {
+      txt($('edCopyMsg'), 'Kopieret til ' + n + (n === 1 ? ' dag' : ' dage'));
+      window.setTimeout(function () { txt($('edCopyMsg'), ''); }, 4000);
+      buildJson(); dirty();
+    } else {
+      txt($('edCopyMsg'), 'V\u00e6lg f\u00f8rst de dage der skal have tiderne');
+    }
+  }
+
+  /* --- venues --- */
+  function newId() {
+    idSeq++;
+    return 'v' + (new Date()).getTime().toString(36) + idSeq;
+  }
+
+  function addVenueRow(v) {
+    var host = $('edVenues');
+    var row = tpl('tplVenue');
+    row.setAttribute('data-id', v.id);
+    host.appendChild(row);
+    q(row, '.js-vname-in').value = v.name || '';
+    q(row, '.js-up').onclick = function () {
+      var prev = row.previousElementSibling;
+      if (prev) { host.insertBefore(row, prev); syncFromForm(); dirty(); }
+    };
+    q(row, '.js-down').onclick = function () {
+      var next = row.nextElementSibling;
+      if (next) { host.insertBefore(next, row); syncFromForm(); dirty(); }
+    };
+    q(row, '.js-del').onclick = function () {
+      var name = trim(q(row, '.js-vname-in').value) || 'stedet';
+      if (!window.confirm('Fjern ' + name + ' fra alle dage?')) { return; }
+      row.parentNode.removeChild(row);
+      syncFromForm(); dirty();
+    };
+    return row;
+  }
+
+  function renderVenueRows() {
+    clear($('edVenues'));
+    for (var i = 0; i < edVenues.length; i++) { addVenueRow(edVenues[i]); }
+  }
+
+  function readVenueRows() {
+    var rows = $('edVenues').getElementsByClassName('js-venue');
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      out.push({ id: rows[i].getAttribute('data-id'), name: q(rows[i], '.js-vname-in').value });
+    }
+    edVenues = out;
+  }
+
+  function syncFromForm() {
+    readDayRows();
+    readVenueRows();
+    buildJson();
+  }
+
+  function val(id, fallback) {
+    var v = trim($(id).value);
+    return v ? v : fallback;
+  }
+
+  function collect() {
+    var out = {
+      style: {
+        fontFamily: $('edFontFamily').value,
+        szHeading: val('edSzHeading', '1.05'),
+        szDay: val('edSzDay', '2.4'),
+        szTag: val('edSzTag', '1'),
+        szHeadRail: val('edSzHeadRail', '1.05'),
+        szName: val('edSzName', '1.7'),
+        szHours: val('edSzHours', '1.6'),
+        szNote: val('edSzNote', '1.25')
+      },
+      layout: {
+        railWidth: val('edRailWidth', '17'),
+        widgetHeight: val('edWidgetHeight', '140')
+      },
+      rotation: {
+        todaySec: val('edTodaySec', '15'),
+        tomorrowSec: val('edTomorrowSec', '15'),
+        dayStart: normClock(val('edDayStart', '04:00'))
+      },
+      display: {
+        dimClosed: $('edDimClosed').value === '1',
+        rowLayout: $('edRowLayout').value
+      },
+      heading: val('edHeading', 'Opening Hours'),
+      labels: {
+        today: val('edLblToday', 'Today'),
+        tomorrow: val('edLblTomorrow', 'Tomorrow'),
+        closed: val('edLblClosed', 'Closed'),
+        always: val('edLblAlways', 'Always open')
+      },
+      dayNames: [],
+      venues: [],
+      hours: {}
+    };
+    var i, k;
+    for (i = 0; i < 7; i++) { out.dayNames.push(val('edDN' + i, EN_DAYS[i])); }
+    for (i = 0; i < edVenues.length; i++) {
+      if (trim(edVenues[i].name)) { out.venues.push({ id: edVenues[i].id, name: trim(edVenues[i].name) }); }
+    }
+    for (k = 0; k < 7; k++) {
+      var key = DAY_KEYS[k];
+      out.hours[key] = {};
+      for (i = 0; i < out.venues.length; i++) {
+        var id = out.venues[i].id;
+        var e = edHours[key] && edHours[key][id];
+        out.hours[key][id] = e ? clone(e) : { mode: 'closed', slots: [] };
+      }
+    }
+    return out;
+  }
+
+  function buildJson() { $('edOut').value = JSON.stringify(collect(), null, 2); }
+
+  function startEditor() {
+    document.body.className = 'mode-edit';
+
+    var st = data.style || {};
+    $('edFontFamily').value = st.fontFamily || "'Inter', Arial, sans-serif";
+    $('edSzHeading').value = st.szHeading || '1.05';
+    $('edSzDay').value = st.szDay || '2.4';
+    $('edSzTag').value = st.szTag || '1';
+    $('edSzHeadRail').value = st.szHeadRail || '1.05';
+    $('edSzName').value = st.szName || '1.7';
+    $('edSzHours').value = st.szHours || '1.6';
+    $('edSzNote').value = st.szNote || '1.25';
+
+    var ly = data.layout || {};
+    $('edRailWidth').value = ly.railWidth || '17';
+    $('edWidgetHeight').value = ly.widgetHeight || '140';
+
+    var ro = data.rotation || {};
+    $('edTodaySec').value = ro.todaySec != null ? ro.todaySec : '15';
+    $('edTomorrowSec').value = ro.tomorrowSec != null ? ro.tomorrowSec : '15';
+    $('edDayStart').value = ro.dayStart != null ? ro.dayStart : '04:00';
+
+    var di = data.display || {};
+    $('edDimClosed').value = (di.dimClosed === false || di.dimClosed === '0') ? '0' : '1';
+    $('edRowLayout').value = di.rowLayout === 'row' ? 'row' : 'stack';
+
+    $('edHeading').value = data.heading || 'Opening Hours';
+    var lb = data.labels || {};
+    $('edLblToday').value = lb.today || 'Today';
+    $('edLblTomorrow').value = lb.tomorrow || 'Tomorrow';
+    $('edLblClosed').value = lb.closed || 'Closed';
+    $('edLblAlways').value = lb.always || 'Always open';
+    for (var i = 0; i < 7; i++) { $('edDN' + i).value = dayName(i); }
+
+    edVenues = clone(data.venues || []);
+    edHours = clone(data.hours || {});
+    if (edDay < 0) { edDay = serviceDay(); }
+    copyPick = {};
+
+    renderVenueRows();
+    renderDayTabs();
+    renderDayRows();
+    buildJson();
+    status('Alt synkroniseret', '');
+  }
+
+  function stopTimers() {
+    for (var i = 0; i < timers.length; i++) { window.clearInterval(timers[i]); }
+    timers = [];
+    if (rotTimer) { window.clearTimeout(rotTimer); rotTimer = null; }
+  }
+  function every(fn, ms) { timers.push(window.setInterval(fn, ms)); }
+
+  function onBlurClock(e) {
+    var t = e.target || e.srcElement;
+    if (t && t.className && (' ' + t.className + ' ').indexOf(' js-clock ') > -1) {
+      var n = normClock(t.value);
+      if (n !== t.value) { t.value = n; syncFromForm(); dirty(); }
+    }
+  }
+
+  function bindEditorEvents() {
+    bindTabs();
+    $('edResetSizes').onclick = resetSizes;
+
+    $('edAddVenue').onclick = function () {
+      var row = addVenueRow({ id: newId(), name: '' });
+      q(row, '.js-vname-in').focus();
+      syncFromForm(); dirty();
+    };
+
+    $('edCopy').onclick = function () {
+      var t = [];
+      for (var d = 0; d < 7; d++) { if (copyPick[d]) { t.push(d); } }
+      copyDay(t);
+    };
+    $('edCopyAll').onclick = function () {
+      if (window.confirm('Kopi\u00e9r ' + DA_DAYS[edDay].toLowerCase() + 's tider til alle andre dage?')) {
+        copyDay([0, 1, 2, 3, 4, 5, 6]);
+      }
+    };
+
+    $('edReset').onclick = function () {
+      if (window.confirm('Erstat det du har st\u00e5ende med testtiderne?')) {
+        data = readLocal();
+        startEditor();
+        dirty();
+      }
+    };
+
+    $('edSave').onclick = function () {
+      syncFromForm();
+      var btn = $('edSave');
+      btn.disabled = true;
+      status('Synkroniserer...', '');
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', REMOTE_URL, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        btn.disabled = false;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          data = collect();
+          cacheSet(data);
+          status('Synkroniseret ' + clockOf(nowMinutes()), 'ok');
+        } else if (xhr.status) {
+          status('Synkronisering fejlede (' + xhr.status + ')', 'err');
+        }
+      };
+      xhr.onerror = function () {
+        btn.disabled = false;
+        status('Ingen forbindelse', 'err');
+      };
+      xhr.send($('edOut').value);
+    };
+
+    $('edPreview').onclick = function () {
+      syncFromForm();
+      data = collect();
+      document.body.className = 'mode-preview';
+      stopTimers();
+      startWidget();
+      renderAll();
+      showDay(0);
+      every(function () { if (serviceDay() !== shownDay) { renderHours(); } }, TICK_MS);
+    };
+
+    $('uiBack').onclick = function () {
+      stopTimers();
+      startEditor();
+      dirty();
+    };
+
+    var ed = document.getElementsByClassName('editor')[0];
+    ed.onkeyup = function (e) {
+      var t = e.target || e.srcElement;
+      if (t && t.tagName === 'INPUT' || t && t.tagName === 'TEXTAREA') { syncFromForm(); dirty(); }
+    };
+    ed.onchange = function () { syncFromForm(); dirty(); };
+    if (ed.addEventListener) { ed.addEventListener('blur', onBlurClock, true); }
+  }
+
+  /* ---------------- start ---------------- */
+
+  function startScreen() {
+    startWidget();
+    renderAll();
+    showDay(0);
+
+    /* new day at the chosen time */
+    every(function () {
+      if (serviceDay() !== shownDay) { renderHours(); showDay(0); }
+    }, TICK_MS);
+
+    every(function () {
+      loadRemote(function (n) {
+        if (n) { data = n; applyLayout(); renderHead(); renderHours(); syncRotation(); }
+      });
+    }, REMOTE_REFRESH_MS);
+
+    /* fresh start every night, like the cinema screen */
+    every(function () {
+      var d = faroeNow();
+      if (d.getUTCHours() === 3 && d.getUTCMinutes() === 0) { window.location.reload(); }
+    }, 60000);
+  }
+
+  function boot() {
+    var mode = param('mode');
+    if (mode === 'rail') { document.body.className = 'mode-rail'; }
+    if (param('nowidget')) { document.body.className += ' no-widget'; }
+
+    bindEditorEvents();
+
+    loadRemote(function (o) {
+      var fromRemote = !!o;
+      data = o || cacheGet() || readLocal();
+
+      if (param('edit')) {
+        startEditor();
+        if (!fromRemote && REMOTE_URL) {
+          status('Kunne ikke hente fra Cloudflare - viser seneste kopi', 'err');
+        }
+        return;
+      }
+      startScreen();
+    });
+  }
+
+  if (window.addEventListener) {
+    window.addEventListener('resize', function () {
+      if (data && document.body.className.indexOf('mode-edit') < 0) { applyLayout(); applyFit(); }
+    }, false);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, false);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
