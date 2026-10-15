@@ -1368,10 +1368,12 @@ template { display:none; }
   /* The Infoscreen widget, unchanged, next to this file. */
   var WIDGET_URL = 'widget.html';
 
-  /* Bump this whenever index.html changes. Running screens compare it with
-     the copy on GitHub every 10 minutes and reload when it differs. */
-  var BUILD = '2026-10-15-4';
-  var UPDATE_CHECK_MS = 600000;
+  /* Running screens ask GitHub every minute whether index.html has
+     changed (a tiny HEAD request) and reload as soon as it has. BUILD is
+     the fallback when the server gives no ETag / Last-Modified. */
+  var BUILD = '2026-10-15-6';
+  var UPDATE_CHECK_MS = 60000;
+  var BUILD_CHECK_EVERY = 10;   /* fallback: compare BUILD every 10th check */
 
   var REMOTE_REFRESH_MS = 60000;
   var TICK_MS = 30000;
@@ -1707,28 +1709,43 @@ template { display:none; }
     fitWidget();
   }
 
-  /* The widget's last module (the clock) is made exactly as wide as the
-     panel above it, so the clock always sits centred under the opening
-     hours whatever width the panel is set to. Only the width is touched -
-     the widget itself is unchanged. Works when the page and widget.html
-     come from the same place (GitHub Pages). */
+  /* Widget layout, symmetric around the ship in the middle:
+       Course & Speed = Ship Time = the width of the panel above,
+       Voyage Progress = Destination, and the map/ship gets the centre.
+     The clock therefore always sits centred under the opening hours.
+     Only widths are touched - the widget itself is unchanged. Works when
+     the page and widget.html come from the same place (GitHub Pages). */
+  function setFlex(node, flex, width) {
+    if (!node) { return; }
+    node.style.webkitFlex = flex;
+    node.style.flex = flex;
+    node.style.width = width || '';
+    node.style.maxWidth = width || '';
+    node.style.minWidth = width ? '' : '0';
+  }
+  function moduleOf(doc, sel) {
+    var n = doc.querySelector(sel);
+    while (n && n.parentNode && !(n.className && (' ' + n.className + ' ').indexOf(' module ') > -1)) { n = n.parentNode; }
+    return (n && n.className && (' ' + n.className + ' ').indexOf(' module ') > -1) ? n : null;
+  }
   function fitWidget() {
     var f = $('uiWidget');
     if (!f || f.getAttribute('data-on') !== '1') { return; }
     var doc = null;
     try { doc = f.contentDocument || (f.contentWindow && f.contentWindow.document); } catch (e) { return; }
     if (!doc || !doc.querySelector) { return; }
-    var body = doc.querySelector('.time-body');
-    if (!body || !body.parentNode) { return; }
-    var mod = body.parentNode;
+    var time = moduleOf(doc, '.time-body');
+    if (!time) { return; }
     var w = $('uiRail').offsetWidth;
     if (!w || document.body.className.indexOf('mode-rail') > -1) { return; }
-    if (mod.getAttribute('data-w') === '' + w) { return; }
-    mod.setAttribute('data-w', '' + w);
-    mod.style.webkitFlex = '0 0 ' + w + 'px';
-    mod.style.flex = '0 0 ' + w + 'px';
-    mod.style.width = w + 'px';
-    mod.style.maxWidth = w + 'px';
+    if (time.getAttribute('data-w') === '' + w) { return; }
+    time.setAttribute('data-w', '' + w);
+    var px = w + 'px';
+    setFlex(time, '0 0 ' + px, px);
+    setFlex(moduleOf(doc, '.course-body'), '0 0 ' + px, px);
+    setFlex(moduleOf(doc, '.voyage-body'), '1 1 0px', '');
+    setFlex(moduleOf(doc, '.weather-body'), '1 1 0px', '');
+    setFlex(doc.querySelector('.map-module'), '2 1 0px', '');
     /* let the map in the widget know its box changed size */
     try {
       var ev = doc.createEvent('HTMLEvents');
@@ -2252,18 +2269,42 @@ template { display:none; }
 
   /* ---------------- new version on GitHub? ---------------- */
 
-  function checkForUpdate() {
-    if (!/^https?:$/.test(window.location.protocol)) { return; }
+  var fileStamp = null;
+  var checks = 0;
+
+  function reloadFresh() {
+    /* load the new file, keeping ?nowidget etc., with a fresh cache key */
+    var search = window.location.search.replace(/[?&]_v=[^&]*/g, '').replace(/^&/, '?');
+    search += (search ? '&' : '?') + '_v=' + (new Date()).getTime();
+    window.location.replace(window.location.pathname + search);
+  }
+
+  function checkBuild() {
     var xhr = new XMLHttpRequest();
     try { xhr.open('GET', window.location.pathname + '?_v=' + (new Date()).getTime(), true); } catch (e0) { return; }
     xhr.onreadystatechange = function () {
       if (xhr.readyState !== 4 || xhr.status < 200 || xhr.status >= 300) { return; }
       var m = new RegExp('var BUILD' + " = '([0-9a-z.-]+)'").exec(xhr.responseText || '');
-      if (!m || m[1] === BUILD) { return; }
-      /* load the new file, keeping ?nowidget etc., with a fresh cache key */
-      var search = window.location.search.replace(/[?&]_v=[^&]*/g, '').replace(/^&/, '?');
-      search += (search ? '&' : '?') + '_v=' + m[1];
-      window.location.replace(window.location.pathname + search);
+      if (m && m[1] !== BUILD) { reloadFresh(); }
+    };
+    try { xhr.send(); } catch (e1) {}
+  }
+
+  function checkForUpdate() {
+    if (!/^https?:$/.test(window.location.protocol)) { return; }
+    checks++;
+    var xhr = new XMLHttpRequest();
+    try { xhr.open('HEAD', window.location.pathname + '?_v=' + (new Date()).getTime(), true); } catch (e0) { return; }
+    if ('timeout' in xhr) { xhr.timeout = 15000; }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || xhr.status < 200 || xhr.status >= 300) { return; }
+      var stamp = xhr.getResponseHeader('ETag') || xhr.getResponseHeader('Last-Modified');
+      if (!stamp) {
+        if (checks % BUILD_CHECK_EVERY === 1) { checkBuild(); }
+        return;
+      }
+      if (fileStamp === null) { fileStamp = stamp; return; }   /* first look: remember it */
+      if (stamp !== fileStamp) { reloadFresh(); }
     };
     try { xhr.send(); } catch (e1) {}
   }
@@ -2288,6 +2329,7 @@ template { display:none; }
       });
     }, REMOTE_REFRESH_MS);
 
+    checkForUpdate();   /* remember what the file looks like right now */
     every(checkForUpdate, UPDATE_CHECK_MS);
 
     /* fresh start every night, like the cinema screen */
