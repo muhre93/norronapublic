@@ -1368,6 +1368,11 @@ template { display:none; }
   /* The Infoscreen widget, unchanged, next to this file. */
   var WIDGET_URL = 'widget.html';
 
+  /* Bump this whenever index.html changes. Running screens compare it with
+     the copy on GitHub every 10 minutes and reload when it differs. */
+  var BUILD = '2026-10-15-4';
+  var UPDATE_CHECK_MS = 600000;
+
   var REMOTE_REFRESH_MS = 60000;
   var TICK_MS = 30000;
   var CACHE_KEY = 'norrona-hours';
@@ -2245,6 +2250,26 @@ template { display:none; }
     if (ed.addEventListener) { ed.addEventListener('blur', onBlurClock, true); }
   }
 
+  /* ---------------- new version on GitHub? ---------------- */
+
+  function checkForUpdate() {
+    if (!/^https?:$/.test(window.location.protocol)) { return; }
+    var xhr = new XMLHttpRequest();
+    try { xhr.open('GET', window.location.pathname + '?_v=' + (new Date()).getTime(), true); } catch (e0) { return; }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || xhr.status < 200 || xhr.status >= 300) { return; }
+      var m = new RegExp('var BUILD' + " = '([0-9a-z.-]+)'").exec(xhr.responseText || '');
+      if (!m || m[1] === BUILD) { return; }
+      /* load the new file, keeping ?nowidget etc., with a fresh cache key */
+      var search = window.location.search.replace(/[?&]_v=[^&]*/g, '').replace(/^&/, '?');
+      search += (search ? '&' : '?') + '_v=' + m[1];
+      window.location.replace(window.location.pathname + search);
+    };
+    try { xhr.send(); } catch (e1) {}
+  }
+  window.hoursBuild = function () { return BUILD; };
+  window.hoursCheckUpdate = checkForUpdate;
+
   /* ---------------- start ---------------- */
 
   function startScreen() {
@@ -2262,6 +2287,8 @@ template { display:none; }
         if (n) { data = n; applyLayout(); renderHead(); renderHours(); syncRotation(); }
       });
     }, REMOTE_REFRESH_MS);
+
+    every(checkForUpdate, UPDATE_CHECK_MS);
 
     /* fresh start every night, like the cinema screen */
     every(function () {
