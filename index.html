@@ -78,6 +78,7 @@ body {
 
 .dayhead {
   display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; align-items:center;
+  -webkit-justify-content:center; justify-content:center;
   margin-bottom:calc(1.1vh * var(--fit)); padding:0 0.85em;
 }
 .dayname {
@@ -99,8 +100,9 @@ body {
 
 /* every venue is a card, same as a screening on the cinema screen */
 .venue {
-  position:relative;
-  padding:calc(1.05vh * var(--fit)) 0.85em;
+  position:relative; text-align:center;
+  display:flex; flex-direction:column; -webkit-justify-content:center; justify-content:center;
+  padding:calc(.9vh * var(--fit)) 0.85em;
   margin-bottom:calc(.75vh * var(--fit));
   border-radius:10px;
   background:rgba(255,255,255,0.028);
@@ -113,8 +115,12 @@ body {
 }
 .venue .slots {
   font-size:calc(var(--sz-hours, 1.6vh) * var(--fit)); font-weight:500; color:#cbd5e1;
-  line-height:1.3; margin-top:calc(.5vh * var(--fit));
+  line-height:1.3; margin-top:calc(.35vh * var(--fit));
   font-variant-numeric: tabular-nums; letter-spacing:.02em;
+  /* room for the same number of time lines on every card (default two),
+     so all cards are the same height and one-line times sit centred */
+  min-height:calc(var(--sz-hours, 1.6vh) * var(--fit) * 1.3 * var(--slot-lines, 2));
+  display:flex; flex-direction:column; -webkit-justify-content:center; justify-content:center;
 }
 .venue .slots span { display:block; }
 .venue .vnote {
@@ -129,8 +135,12 @@ body {
 }
 
 /* one-line layout: name left, times right; wraps on a narrow rail */
+/* left aligned instead of centred */
+body.align-left .venue { text-align:left; }
+body.align-left .dayhead { -webkit-justify-content:flex-start; justify-content:flex-start; }
+
 body.hours-row .venue {
-  display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; align-items:baseline;
+  flex-direction:row; -webkit-flex-wrap:wrap; flex-wrap:wrap; align-items:center; text-align:left;
 }
 body.hours-row .venue .name { -webkit-flex:1 1 auto; flex:1 1 auto; min-width:0; margin-right:.6em; }
 body.hours-row .venue .slots { -webkit-flex:0 0 auto; flex:0 0 auto; margin-top:0; text-align:right; margin-left:auto; }
@@ -446,7 +456,9 @@ template { display:none; }
   },
   "display": {
     "dimClosed": true,
-    "rowLayout": "stack"
+    "rowLayout": "stack",
+    "align": "center",
+    "slotLines": "2"
   },
   "heading": "Opening Hours",
   "labels": {
@@ -1207,6 +1219,14 @@ template { display:none; }
             <select id="edDimClosed"><option value="1">Ja</option><option value="0">Nej</option></select>
           </div>
           <div class="field w-num">
+            <label>Justering</label>
+            <select id="edAlign"><option value="center">Centreret</option><option value="left">Venstre</option></select>
+          </div>
+          <div class="field w-num">
+            <label>Plads til tider <span class="help" title="Hvor mange linjer med tider hvert kort har plads til. Med 2 er alle kort lige h&#248;je, og et sted med &#233;t tidsrum st&#229;r centreret.">?</span></label>
+            <select id="edSlotLines"><option value="1">1 linje</option><option value="2">2 linjer</option><option value="3">3 linjer</option></select>
+          </div>
+          <div class="field w-num">
             <label>Opstilling</label>
             <select id="edRowLayout"><option value="stack">Navn over tider</option><option value="row">Navn og tider p&#229; linje</option></select>
           </div>
@@ -1666,9 +1686,11 @@ template { display:none; }
     var railOnly = cls.indexOf('mode-rail') > -1;
 
     var disp = data.display || {};
-    var rowLayout = disp.rowLayout === 'row';
-    if (rowLayout && cls.indexOf('hours-row') < 0) { document.body.className = cls + ' hours-row'; }
-    if (!rowLayout && cls.indexOf('hours-row') > -1) { document.body.className = cls.replace(/\s*hours-row/g, ''); }
+    setBodyClass('hours-row', disp.rowLayout === 'row');
+    setBodyClass('align-left', disp.align === 'left');
+    var lines = parseInt(disp.slotLines, 10);
+    if (isNaN(lines) || lines < 1 || lines > 3) { lines = 2; }
+    b.setProperty('--slot-lines', '' + lines);
 
     var rail = $('uiRail');
     var widget = $('uiWidget');
@@ -1686,6 +1708,13 @@ template { display:none; }
     if (padPx > 40) { padPx = 40; }
     rail.style.paddingLeft = padPx + 'px';
     rail.style.paddingRight = padPx + 'px';
+  }
+
+  function setBodyClass(name, on) {
+    var cls = ' ' + document.body.className + ' ';
+    var has = cls.indexOf(' ' + name + ' ') > -1;
+    if (on && !has) { document.body.className = trim(cls + name); }
+    if (!on && has) { document.body.className = trim(cls.replace(' ' + name + ' ', ' ')); }
   }
 
   function startWidget() {
@@ -2010,7 +2039,9 @@ template { display:none; }
       },
       display: {
         dimClosed: $('edDimClosed').value === '1',
-        rowLayout: $('edRowLayout').value
+        rowLayout: $('edRowLayout').value,
+        align: $('edAlign').value,
+        slotLines: $('edSlotLines').value
       },
       heading: val('edHeading', 'Opening Hours'),
       labels: {
@@ -2067,6 +2098,8 @@ template { display:none; }
     var di = data.display || {};
     $('edDimClosed').value = (di.dimClosed === false || di.dimClosed === '0') ? '0' : '1';
     $('edRowLayout').value = di.rowLayout === 'row' ? 'row' : 'stack';
+    $('edAlign').value = di.align === 'left' ? 'left' : 'center';
+    $('edSlotLines').value = (di.slotLines === '1' || di.slotLines === '3' || di.slotLines === 1 || di.slotLines === 3) ? '' + di.slotLines : '2';
 
     $('edHeading').value = data.heading || 'Opening Hours';
     var lb = data.labels || {};
